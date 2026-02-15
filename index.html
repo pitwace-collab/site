@@ -1085,9 +1085,7 @@ function renderizarListaOrdenacao() {
       <h2>Criar produto</h2>
 
       <input id="admNome" type="text" placeholder="Nome do produto">
-
       <input id="admPrecoRiscado" type="text" placeholder="Preço riscado (ex: R$ 299,90)">
-
       <input id="admPrecoPix" type="text" placeholder="Preço no PIX (ex: R$ 199,90)">
 
       <select id="admMarca">
@@ -1113,7 +1111,6 @@ function renderizarListaOrdenacao() {
       <hr style="margin:30px 0; opacity:.2">
 
       <h2>Produtos cadastrados</h2>
-
       <div id="admListaProdutos"></div>
 
       <button
@@ -1130,51 +1127,31 @@ function renderizarListaOrdenacao() {
       <h2>Histórico de pedidos</h2>
       <div id="admHistoricoPedidos"></div>
       <button
-  class="admfs-action"
-  style="background:#8b0000;margin-top:20px"
-  onclick="limparHistoricoPedidos()"
->
-  🧹 Limpar histórico de pedidos
-</button>
-
+        class="admfs-action"
+        style="background:#8b0000;margin-top:20px"
+        onclick="limparHistoricoPedidos()"
+      >
+        🧹 Limpar histórico de pedidos
+      </button>
     </section>
 
+    <!-- APARÊNCIA -->
+    <section class="admfs-page" id="fs-aparencia">
+      <h2>Aparência do site</h2>
 
-</section>
+      <label>Logo do site</label>
+      <input type="file" id="logoFS">
 
-<!-- APARÊNCIA -->
-<section class="admfs-page" id="fs-aparencia">
-  <h2>Aparência do site</h2>
+      <label>Favicon</label>
+      <input type="file" id="faviconFS">
 
-  <label>Logo do site</label>
-  <input type="file" id="logoFS">
+      <button class="admfs-action">Aplicar</button>
+    </section>
 
-  <label>Favicon</label>
-  <input type="file" id="faviconFS">
-
-  <button class="admfs-action">Aplicar</button>
-</section>
-
-</main>
+  </main>
 </div>
 
 <script>
-
-// 1. Variável que guarda o status da foto (fica no topo do arquivo)
-let linkDaFotoNoServidor = "Não enviada"; 
-
-// 2. Função que detecta quando o cliente escolhe a foto
-function processarFotoComprovante(input) {
-    const statusTxt = document.getElementById('status-foto');
-    if (input.files && input.files[0]) {
-        // Muda o texto na tela para o cliente ver que funcionou
-        statusTxt.innerText = "✅ Comprovante: " + input.files[0].name;
-        statusTxt.style.color = "#28a745";
-        
-        // Avisa a variável que a foto existe
-        linkDaFotoNoServidor = "Foto anexada no site pelo cliente."; 
-    }
-}
 
 /* ABRIR ADM */
 document.addEventListener('keydown', e => {
@@ -1187,7 +1164,6 @@ document.addEventListener('keydown', e => {
 document.querySelector('.admfs-close').onclick = () => {
     const adm = document.getElementById('admFS');
     adm.classList.add('fechar');
-
     setTimeout(() => {
         adm.classList.remove('show', 'fechar');
     }, 350);
@@ -1200,49 +1176,84 @@ document.querySelectorAll('.admfs-btn').forEach(btn => {
         btn.classList.add('active');
 
         document.querySelectorAll('.admfs-page').forEach(p => p.classList.remove('active'));
-        const pagina = document.getElementById('fs-' + btn.dataset.tab);
-pagina.classList.add('active');
+        document.getElementById('fs-' + btn.dataset.tab).classList.add('active');
 
-if (btn.dataset.tab === 'historico') {
-    listarHistoricoAdm();
-}
-
+        if (btn.dataset.tab === 'historico') {
+            listarHistoricoAdm();
+        }
     };
 });
 
-/* LOGO + FAVICON */
-document.querySelector('#fs-aparencia .admfs-action').onclick = () => {
+/* LOGO + FAVICON SALVANDO NO FIREBASE */
+document.querySelector('#fs-aparencia .admfs-action').onclick = async () => {
 
-    const logo = document.getElementById('logoFS').files[0];
-    const favicon = document.getElementById('faviconFS').files[0];
+    const logoFile = document.getElementById('logoFS').files[0];
+    const faviconFile = document.getElementById('faviconFS').files[0];
 
-    if (logo) {
-        const reader = new FileReader();
-        reader.onload = () => {
-            localStorage.setItem('logoHeader', reader.result);
-            aplicarLogoHeader(reader.result);
-        };
-        reader.readAsDataURL(logo);
+    if (!logoFile && !faviconFile) {
+        alert("Selecione pelo menos um arquivo.");
+        return;
     }
 
-    if (favicon) {
-        let link = document.querySelector("link[rel='icon']");
-        if (!link) {
-            link = document.createElement('link');
-            link.rel = 'icon';
-            document.head.appendChild(link);
+    const storage = firebase.storage();
+    const db = firebase.firestore();
+
+    let logoURL = null;
+    let faviconURL = null;
+
+    try {
+
+        if (logoFile) {
+            const logoRef = storage.ref("config/logo.png");
+            await logoRef.put(logoFile);
+            logoURL = await logoRef.getDownloadURL();
         }
-        link.href = URL.createObjectURL(favicon);
+
+        if (faviconFile) {
+            const faviconRef = storage.ref("config/favicon.png");
+            await faviconRef.put(faviconFile);
+            faviconURL = await faviconRef.getDownloadURL();
+        }
+
+        await db.collection("config").doc("visual").set({
+            logo: logoURL,
+            favicon: faviconURL
+        }, { merge: true });
+
+        alert("Visual atualizado com sucesso!");
+
+    } catch (error) {
+        console.error(error);
+        alert("Erro ao salvar visual.");
     }
 };
 
+/* CARREGAR LOGO E FAVICON AUTOMATICAMENTE */
+firebase.firestore().collection("config")
+.doc("visual")
+.onSnapshot(doc => {
+    if (!doc.exists) return;
+
+    const data = doc.data();
+
+    if (data.logo) {
+        aplicarLogoHeader(data.logo);
+    }
+
+    if (data.favicon) {
+        let link = document.querySelector("link[rel='icon']");
+        if (!link) {
+            link = document.createElement("link");
+            link.rel = "icon";
+            document.head.appendChild(link);
+        }
+        link.href = data.favicon;
+    }
+});
 
 function aplicarLogoHeader(src) {
     const container = document.querySelector('.logo-container');
-    const logoTexto = document.getElementById('logoSite');
     if (!container) return;
-
-    if (logoTexto) logoTexto.style.display = 'none';
 
     const antiga = container.querySelector('img.logo-header');
     if (antiga) antiga.remove();
@@ -1253,73 +1264,7 @@ function aplicarLogoHeader(src) {
     container.appendChild(img);
 }
 
-/* ===== PRODUTOS ===== */
 
-function salvarProdutoAdm() {
-    const nome = document.getElementById('admNome').value.trim();
-    const precoRiscado = document.getElementById('admPrecoRiscado').value.trim();
-    const precoPix = document.getElementById('admPrecoPix').value.trim();
-    const marca = document.getElementById('admMarca').value;
-    const arquivos = document.getElementById('admImgs').files;
-
-    if (!nome || !precoRiscado || !precoPix || !marca || arquivos.length === 0) {
-        alert('Preencha todos os campos');
-        return;
-    }
-
-    const imagens = [];
-    let carregadas = 0;
-
-    Array.from(arquivos).forEach((file, index) => {
-        const reader = new FileReader();
-        reader.onload = () => {
-            imagens[index] = reader.result;
-            carregadas++;
-            if (carregadas === arquivos.length) {
-                salvarProdutoStorage(nome, precoRiscado, precoPix, marca, imagens);
-            }
-        };
-        reader.readAsDataURL(file);
-    });
-}
-
-function salvarProdutoStorage(nome, precoRiscado, precoPix, marca, imagens) {
-
-    const produto = {
-        nome,
-        preco: precoRiscado,
-        precoPix,
-        marca,
-        img: imagens[0],
-        imagens,
-        criadoEm: firebase.firestore.FieldValue.serverTimestamp()
-    };
-
-    if (indiceProdutoEditando) {
-        // EDITAR
-        db.collection("produtos").doc(indiceProdutoEditando).set(produto)
-            .then(() => {
-                alert("Produto atualizado");
-                indiceProdutoEditando = null;
-                listarProdutosAdm();
-            });
-    } else {
-        // NOVO
-        db.collection("produtos").add(produto)
-            .then(() => {
-                alert("Produto salvo");
-                listarProdutosAdm();
-            });
-    }
-
-    document.getElementById('admNome').value = '';
-    document.getElementById('admPrecoRiscado').value = '';
-    document.getElementById('admPrecoPix').value = '';
-    document.getElementById('admMarca').value = '';
-    document.getElementById('admImgs').value = '';
-
-    document.querySelector('#fs-produtos .admfs-action').innerText = 'Salvar produto';
-}
 
 
 
@@ -2095,3 +2040,4 @@ console.log("🔥 Firebase conectado com sucesso");
 </body>
 
 </html>
+
